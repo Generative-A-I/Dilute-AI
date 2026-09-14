@@ -20,7 +20,7 @@ def parse_args() -> argparse.Namespace:
         default="auto",
         help=f"Teacher model ID/path, or auto (default: {DEFAULT_TEACHER}; low-disk fallback: {FALLBACK_TEACHER}).",
     )
-    parser.add_argument("--records", type=int, default=100)
+    parser.add_argument("--records", type=int, default=1000)
     parser.add_argument("--output-root", type=Path, default=Path("outputs"))
     parser.add_argument("--device", choices=["auto", "cuda", "cpu", "mps"], default="auto")
     parser.add_argument("--precision", choices=["auto", "no", "bf16", "fp16"], default="auto")
@@ -31,6 +31,13 @@ def parse_args() -> argparse.Namespace:
 def run(command: list[str]) -> None:
     print("\n$ " + " ".join(command), flush=True)
     subprocess.run(command, check=True)
+
+
+def record_count(path: Path) -> int:
+    if not path.exists():
+        return 0
+    with path.open(encoding="utf-8") as source:
+        return sum(1 for line in source if line.strip())
 
 
 def choose_teacher(requested: str) -> str:
@@ -61,9 +68,11 @@ def main() -> None:
     python = sys.executable
     teacher_model = choose_teacher(args.teacher_model)
 
-    if args.force or not prompt_file.exists():
+    prompts_need_refresh = args.force or record_count(prompt_file) < args.records
+    if prompts_need_refresh:
         run([python, "-m", "dilute1.prepare_wikitext", "--output", str(prompt_file), "--max-records", str(args.records)])
-    if args.force or not teacher_file.exists():
+    teacher_need_refresh = args.force or prompts_need_refresh or record_count(teacher_file) < args.records
+    if teacher_need_refresh:
         run(
             [
                 python,
@@ -81,7 +90,7 @@ def main() -> None:
                 args.device,
             ]
         )
-    if args.force or not (tokenizer_dir / "tokenizer.json").exists():
+    if args.force or teacher_need_refresh or not (tokenizer_dir / "tokenizer.json").exists():
         run(
             [
                 python,

@@ -22,7 +22,7 @@ After setup, run the complete default pipeline:
 dilute1-pipeline
 ```
 
-This automatically selects a built-in teacher, downloads WikiText, creates synthetic responses, trains a tokenizer, and trains Dilute-1. On machines with at least 5 GB free it uses `deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B`; on smaller machines it uses `HuggingFaceTB/SmolLM2-135M-Instruct` so the default run can complete. It uses 100 examples by default so the first run is practical. Add `--records 10000` for a larger dataset, or `--force` to regenerate existing files.
+This automatically selects a built-in teacher, downloads WikiText, creates synthetic responses, trains a tokenizer, and trains Dilute-1. On machines with at least 5 GB free it uses `deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B`; on smaller machines it uses `HuggingFaceTB/SmolLM2-135M-Instruct` so the default run can complete. It uses 1,000 examples by default. Existing files are automatically expanded when they contain fewer records; use `--records 10000` for a larger dataset, or `--force` to regenerate everything.
 
 The larger built-in teacher is a public DeepSeek distillation checkpoint rather than an unavailable/private “DeepSeek v4” identifier. You can replace it without changing the pipeline code:
 
@@ -80,9 +80,9 @@ The generator runs inference only. It does not create or train a student model.
 If the console commands are not found, use the module form from the repository root after activating `.venv`:
 
 ```bash
-python -m dilute1.prepare_wikitext --output data/wikitext-prompts.jsonl --max-records 20
-python -m dilute1.generate --teacher-model YOUR_DEEPSEEK_V4_MODEL_ID_OR_PATH --prompts data/wikitext-prompts.jsonl --output data/teacher.jsonl
-python -m dilute1.tokenizer --input data/wikitext-prompts.jsonl data/teacher.jsonl --output-dir outputs/tokenizer
+.venv/bin/python -m dilute1.prepare_wikitext --output data/wikitext-prompts.jsonl --max-records 20
+.venv/bin/python -m dilute1.generate --teacher-model YOUR_DEEPSEEK_V4_MODEL_ID_OR_PATH --prompts data/wikitext-prompts.jsonl --output data/teacher.jsonl
+.venv/bin/python -m dilute1.tokenizer --input data/wikitext-prompts.jsonl data/teacher.jsonl --output-dir outputs/tokenizer
 ```
 
 ### 4. Train Dilute-1
@@ -119,7 +119,7 @@ For a cheap CPU smoke test, use a tiny tokenizer and dataset plus `--layers 2 --
 After training completes, run a prompt through Dilute-1:
 
 ```bash
-dilute1-chat \
+.venv/bin/python -m dilute1.chat \
 	--checkpoint outputs/dilute-1 \
 	--prompt "Explain how neural networks learn."
 ```
@@ -127,5 +127,5 @@ dilute1-chat \
 Omit `--prompt` for interactive mode and type `/exit` to stop:
 
 ```bash
-dilute1-chat --checkpoint outputs/dilute-1 --device auto
+.venv/bin/python -m dilute1.chat --checkpoint outputs/dilute-1 --device auto
 ```
