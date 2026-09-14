@@ -1,0 +1,6 @@
+[console_scripts]
+dilute1-generate = dilute1.generate:main
+dilute1-pipeline = dilute1.pipeline:main
+dilute1-tokenizer = dilute1.tokenizer:main
+dilute1-train = dilute1.train:main
+dilute1-wikitext = dilute1.prepare_wikitext:main
