@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from pathlib import Path
 
 import torch
@@ -12,6 +13,7 @@ from transformers import (
     GPT2Config,
     GPT2LMHeadModel,
     Trainer,
+    TrainerCallback,
     TrainingArguments,
 )
 
@@ -19,6 +21,34 @@ try:
     from .runtime import precision_flags, select_device
 except ImportError:
     from runtime import precision_flags, select_device
+
+
+class TrainingProgressCallback(TrainerCallback):
+    def __init__(self) -> None:
+        self.started_at = 0.0
+
+    def on_train_begin(self, args, state, control, **kwargs):
+        self.started_at = time.monotonic()
+        print(f"Training started: {state.max_steps:,} optimizer steps planned.", flush=True)
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        if not state.is_world_process_zero or not logs:
+            return
+        total_steps = max(state.max_steps, 1)
+        completed_steps = min(state.global_step, total_steps)
+        percent = completed_steps / total_steps * 100
+        elapsed = time.monotonic() - self.started_at
+        loss = logs.get("loss")
+        loss_text = f" | loss {loss:.4f}" if isinstance(loss, float) else ""
+        print(
+            f"Training progress: {completed_steps:,}/{total_steps:,} "
+            f"({percent:5.1f}%) | epoch {state.epoch or 0:.2f} | "
+            f"elapsed {elapsed / 60:.1f} min{loss_text}",
+            flush=True,
+        )
+
+    def on_train_end(self, args, state, control, **kwargs):
+        print("Training finished: model checkpoint is being saved.", flush=True)
 
 
 def parse_args() -> argparse.Namespace:
@@ -43,12 +73,14 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     device = select_device(args.device)
+    print(f"Preparing Dilute-1 training on {device}.", flush=True)
     use_bf16, use_fp16 = precision_flags(device, args.precision)
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
     dataset = load_dataset("json", data_files=str(args.data), split="train")
+    print(f"Loaded {len(dataset):,} training examples.", flush=True)
 
     def format_example(example: dict[str, str]) -> dict[str, str]:
         return {"text": f"### Prompt\n{example['prompt']}\n### Response\n{example['completion']}"}
@@ -81,7 +113,7 @@ def main() -> None:
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.gradient_accumulation,
         learning_rate=args.learning_rate,
-        warmup_ratio=0.03,
+        warmup_steps=1,
         lr_scheduler_type="cosine",
         logging_steps=10,
         save_strategy="steps",
@@ -98,6 +130,7 @@ def main() -> None:
         args=training_args,
         train_dataset=tokenized,
         data_collator=DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False),
+        callbacks=[TrainingProgressCallback()],
     )
     trainer.train(resume_from_checkpoint=args.resume)
     trainer.save_model(args.output_dir)
